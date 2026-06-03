@@ -24,18 +24,6 @@
         const BASE = "https://api.themoviedb.org/3";
         const IMG = "https://image.tmdb.org/t/p";
 
-        // Your TMDB token is safely obfuscated here so bots on GitHub cannot scan or read it
-        const OBFUSCATED_TOKEN = "ZXlKaGJHY2lPaUpJVXpJMk5YSmkuZXlKaGRXUWlPaUprTVdZeVlXNmlZemhrTlRrMU9X..." 
-
-        // Fast decoding utility to feed the API seamlessly on runtime
-        const getCleanToken = () => {
-          try {
-            return atob(OBFUSCATED_TOKEN);
-          } catch (e) {
-            return "";
-          }
-        };
-
         // Custom LocalStorage Hook
         function useLocalStorage(key, init) {
           const [val, setVal] = useState(() => {
@@ -542,7 +530,7 @@
                           {similar.length === 0 ? (
                             <p style={{ color: "#555", gridColumn: "1/-1", textAlign: "center", padding: 32 }}>No similar movies found.</p>
                           ) : similar.map((m) => (
-                            <MovieCard key={m.id} movie={m} onClick={(mv) => setSelectedId(mv.id)} isInWatchlist={watchlist.some((w) => w.id === m.id)} onWatchlistToggle={onWatchlistToggle} />
+                            <MovieCard key={m.id} movie={m} onClick={() => {}} isInWatchlist={watchlist.some((w) => w.id === m.id)} onWatchlistToggle={onWatchlistToggle} />
                           ))}
                         </div>
                       )}
@@ -606,6 +594,30 @@
           );
         }
 
+        // Minimalist Premium Setup Card Component
+        function SetupOverlay({ onSave }) {
+          const [input, setInput] = useState("");
+          return (
+            <div style={{ fixed: "position", inset: 0, background: "#060606", display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", padding: 20 }}>
+              <div style={{ background: "#0d0d0d", border: "1px solid #222", padding: "40px 32px", borderRadius: 12, maxWidth: 440, width: "100%", textAlign: "center", boxShadow: "0 30px 90px rgba(0,0,0,0.8)" }}>
+                <h1 style={{ color: "#E6B31E", fontFamily: "'Playfair Display', serif", fontSize: 28, margin: "0 0 8px", fontWeight: 800 }}>CINEPHILE</h1>
+                <p style={{ color: "#888", fontSize: 14, margin: "0 0 28px", lineHeight: 1.5 }}>Connect your environment. Enter your private TMDB API Read Bearer Token below to initialize the app platform interface securely.</p>
+                <input 
+                  type="password" 
+                  value={input} 
+                  onChange={(e) => setInput(e.target.value)} 
+                  placeholder="Paste your eyJhbGciOiJIUz..." 
+                  style={{ width: "100%", background: "#161616", border: "1px solid #333", borderRadius: 6, color: "#fff", padding: "12px 14px", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 20 }}
+                />
+                <button 
+                  onClick={() => input.trim() && onSave(input.trim())}
+                  style={{ width: "100%", background: "#E6B31E", border: "none", color: "#000", padding: "12px", borderRadius: 6, fontSize: 14, fontWeight: 700, cursor: "pointer", letterSpacing: "0.03em" }}
+                >Initialize App</button>
+              </div>
+            </div>
+          );
+        }
+
         function WatchlistPanel({ watchlist, onClose, onMovieClick, onRemove }) {
           return (
             <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1500, display: "flex", justifyContent: "flex-end" }}>
@@ -650,6 +662,7 @@
         }
 
         function App() {
+          const [token, setToken] = useLocalStorage("tmdb_token", null);
           const [trending, setTrending] = useState([]);
           const [popular, setPopular] = useState([]);
           const [topRated, setTopRated] = useState([]);
@@ -663,14 +676,14 @@
           const [reviews, setReviews] = useLocalStorage("reviews", {});
 
           const fetcher = useCallback((url) => {
-            const activeToken = getCleanToken();
-            if (!activeToken) return Promise.reject("Invalid Token configuration");
+            if (!token) return Promise.reject("No token available");
             return fetch(url, {
-              headers: { Authorization: `Bearer ${activeToken}`, "Content-Type": "application/json" }
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
             }).then((r) => r.json());
-          }, []);
+          }, [token]);
 
           useEffect(() => {
+            if (!token) return;
             Promise.all([
               fetcher(`${BASE}/trending/movie/day?language=en-US`),
               fetcher(`${BASE}/movie/popular?language=en-US&page=1`),
@@ -683,8 +696,8 @@
               setTopRated(trData.results || []);
               setUpcoming(uData.results || []);
               setNowPlaying(nData.results || []);
-            }).catch(err => console.error("Error running application layout sync:", err));
-          }, [fetcher]);
+            }).catch(err => console.error("Error fetching metrics:", err));
+          }, [token, fetcher]);
 
           const toggleWatchlist = (movie) => {
             const exists = watchlist.some((m) => m.id === movie.id);
@@ -702,6 +715,10 @@
             });
           };
 
+          if (!token) {
+            return <SetupOverlay onSave={setToken} />;
+          }
+
           return (
             <div style={{ background: "#060606", minHeight: "100vh", color: "#fff" }}>
               <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 5%", background: "rgba(6,6,6,0.8)", backdropFilter: "blur(10px)", position: "sticky", top: 0, zIndex: 100 }}>
@@ -709,6 +726,7 @@
                 <div style={{ display: "flex", gap: 24 }}>
                   <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>🔍 Search</button>
                   <button onClick={() => setWatchlistOpen(true)} style={{ background: "none", border: "none", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>🎬 Watchlist ({watchlist.length})</button>
+                  <button onClick={() => setToken(null)} style={{ background: "none", border: "none", color: "#666", fontSize: 13, cursor: "pointer" }}>Disconnect Key</button>
                 </div>
               </header>
 
@@ -757,7 +775,7 @@
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(/app/i.test(typeof App) ? <App /> : <App />);
+        root.render(<App />);
     </script>
 </body>
 </html>
